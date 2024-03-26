@@ -1,5 +1,8 @@
+.vscode
+
 __pycache__
-_preparation
-notes.txt
-.idea
-datasets/_old
+out
+stsc/benchmark/files
+
+stsc/benchmark/baseline_models/particle_lstm.py
+custom_dataset_definition_example.py

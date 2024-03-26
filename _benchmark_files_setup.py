@@ -1,0 +1,1 @@
+# setup script for initializing all benchmark files (generates data sets and ground truth data)
