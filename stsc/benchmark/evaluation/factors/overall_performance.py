@@ -16,6 +16,7 @@ from stsc.benchmark.evaluation.metrics import Metrics
 import stsc.benchmark.evaluation.metrics as metr
 from stsc.benchmark.misc.overrides import overrides
 import stsc.benchmark.misc.seq_plot as seq_plot
+from stsc.benchmark.misc.helpers import path
 
 
 class OverallPerformance(EvaluationFactor):
@@ -33,13 +34,13 @@ class OverallPerformance(EvaluationFactor):
     - Wasserstein Distance: Another metric for comparing probability distributions.
     - ADE: Average Displacement Error calculated from a maximum likelihood estimate. For completeness
     """
-    def __init__(self) -> None:
-        EvaluationFactor.__init__(self, "Test factor: Overall performance")
+    def __init__(self, rng: Optional[np.random.Generator] = None) -> None:
+        EvaluationFactor.__init__(self, "Test factor: Overall performance", rng)
         self._init_datasets()
         self._init_gt()
 
     def _init_datasets(self) -> None:
-        data_file_path = os.path.join(self._stsc_dir, "files/datasets/overall_performance.pkl")
+        data_file_path = path(os.path.join(self._stsc_dir, "files/datasets/overall_performance.pkl"), True)
         if not os.path.exists(data_file_path):
             # sample train/test datasets with an 80/20 split
             test_seq_lens = [8, 10, 15]  # test sequences length per dataset
@@ -48,9 +49,9 @@ class OverallPerformance(EvaluationFactor):
                 n_test_samples = int(n_train_samples / 0.8 * 0.2)  # "80/20" split, but test dataset is inflated, as samples will be sliced into overlapping pieces of given sequence length (samples from different components in dataset can have different lengths)
                 test_seq_len = test_seq_lens[i]
                 self._data_gens[dataset.name] = dataset
-                self._training_datasets[dataset.name] = dataset.sample(n_train_samples)
+                self._training_datasets[dataset.name] = dataset.sample(n_train_samples, rng=self._rng)
                 # prepare test dataset
-                samples = dataset.sample(n_test_samples) 
+                samples = dataset.sample(n_test_samples, rng=self._rng) 
                 test_data = []
                 start_indices = []
                 for s in samples:
@@ -64,7 +65,7 @@ class OverallPerformance(EvaluationFactor):
 
     def _init_gt(self) -> None:  
         # calculate gt distribution sample sets for each dataset
-        data_file_path_base = os.path.join(self._stsc_dir, "files/datasets/overall_performance_gt")
+        data_file_path_base = path(os.path.join(self._stsc_dir, "files/datasets/overall_performance_gt"), True)
         if not os.path.exists(f"{data_file_path_base}_samples.pkl"):
             self._test_sample_seqs = {}
             self._test_posteriors = {}
@@ -81,7 +82,7 @@ class OverallPerformance(EvaluationFactor):
                     gmm_seq = data_gen.sequence_distribution()
                     self._test_posteriors[ds].append(gmm_seq)
                     for step in range(pred_len):
-                        samples[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples)
+                        samples[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples, rng=self._rng)
                 self._test_sample_seqs[ds] = SequenceSampleSet(samples)
 
             with open(f"{data_file_path_base}_samples.pkl", "wb") as f:

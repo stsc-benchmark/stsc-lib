@@ -42,6 +42,28 @@ def nll(
     return nll
 
 
+def kl_div2(
+        pred_samples: SequenceSampleSet,
+        gt_gmm_seqs: List[GMMSequence],
+        n_gt_samples: int = 500,
+        ret_mean: bool = True
+    ) -> float:
+    # https://ieeexplore.ieee.org/document/4218101
+    # D(f||g) = int f(x) log f(x)/g(x) dx, where f(x) is the ground truth distribution and g(x) the predicted distribution
+    # For GMM: MC approach: D_MC(f||g) = 1/n sum^n_{i=1} log f(x_i) / g(x_i) -> D(f||g) for n -> infty
+    # -> samples x_i are drawn from f. The variance of the estimation error is 1/n Var_f[log f/g]
+    kl_div = []
+    for i in range(pred_samples.n_sequences):
+        seq_kl = []
+        for step in range(len(pred_samples.index_kdes[i])):
+            gt_samples = gt_gmm_seqs[i](step).sample(n_samples=n_gt_samples)
+            seq_kl.append((1. / n_gt_samples) * np.sum([gt_gmm_seqs(step).pdf(sample) / pred_samples.index_kdes[i][step].pdf(sample) for sample in gt_samples]))
+        kl_div.append(np.mean(seq_kl))
+    if ret_mean:
+        return np.mean(kl_div)
+    return kl_div
+
+
 def kl_div(
         pred_samples: SequenceSampleSet, 
         gt_gmm_seqs: List[GMMSequence], 
@@ -141,7 +163,6 @@ def wasserstein(
     """
     res = []
     for i in range(pred_samples.n_sequences):
-        test_seq = test_data_obs[i]
         gmm_seq = gt_gmm_seqs[i]
 
         wseq = []

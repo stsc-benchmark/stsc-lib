@@ -19,7 +19,6 @@ def balanced_tmaze():
         weights=[0.5, 0.5],
         means=[l_mean, r_mean],
         covs=[l_cov, r_cov],
-        sampling_seed=123,
         name="tmaze"
     )
 
@@ -37,7 +36,6 @@ def balanced_tmaze_longtail():
         weights=[0.5, 0.5],
         means=[l_mean, r_mean],
         covs=[l_cov, r_cov],
-        sampling_seed=123,
         name="tmaze_longtail"
     )
 
@@ -68,7 +66,6 @@ def diamond():
         weights=[0.25, 0.25, 0.25, 0.25],
         means=[s_mean, f_mean, a_mean, d_mean],
         covs=[s_cov, f_cov, a_cov, d_cov],
-        sampling_seed=123,
         name="diamond"
     )
 
@@ -163,14 +160,11 @@ def synth_hyang():
         m, c = pspline.gp_discretize(point_distance=point_distance) 
         means.append(m)
         covs.append(c)
-        #print(np.reshape(np.all(c - c.T == 0), [-1]), np.linalg.eigvals(c))   # TODO: weg
-        #print(np.linalg.cholesky(c))  # TODO: weg
         print(f"comp {len(means)} length: {len(m)}")
 
     return TrajectoryGMM(
         weights=weights,
         means=means,
         covs=covs,
-        sampling_seed=123,
         name="synth_hyang"
     )

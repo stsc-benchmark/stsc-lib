@@ -19,12 +19,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from stsc.baseline_models.red import REDPredictor2D
-import stsc.evaluation.standard_evaluation as se
-from stsc.evaluation.factors.evaluation_factor import EvaluationFactor, ResultsInfoPlotOptions
+from stsc.benchmark.baseline_models.red import REDPredictor2D
+import stsc.benchmark.evaluation.standard_evaluation as se
+from stsc.benchmark.evaluation.factors.evaluation_factor import EvaluationFactor, ResultsInfoPlotOptions
 from stsc.datagen.sequence_sample_set import SequenceSampleSet
-import stsc.misc.helpers as h
-from stsc.misc.print_writer import PrintTarget, PrintWriter
+import stsc.benchmark.misc.helpers as h
+from stsc.benchmark.misc.print_writer import PrintTarget, PrintWriter
 
 
 # TODO: bei sample-basierten metriken auch distanz zu gt selbst (mit zusätzlichen samplesets) als baseline berechnen und angeben (zb bei mm performance)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
     now = datetime.now()
-    res_out_file = "out/red/out.txt"
+    res_out_file = h.path("out/red/out.txt")
     with open(res_out_file, "a") as f: 
         f.write(f"Run at {now.strftime('%d/%m/%Y %H:%M:%S')}\n\n")
 

@@ -15,6 +15,7 @@ from stsc.benchmark.evaluation.factors.evaluation_factor import EvaluationFactor
 import stsc.benchmark.evaluation.standard_evaluation_constants as consts
 from stsc.benchmark.evaluation.metrics import Metrics
 from stsc.benchmark.misc.overrides import overrides
+from stsc.benchmark.misc.helpers import path
 
 
 
@@ -44,27 +45,27 @@ class Responsiveness(EvaluationFactor):
     -- Prediction-GroundTruth-Distance: Only single component case (BIC == 1). Distance between mean vectors.
     -- Prediction Mixture Weights: Is it heavily biased towards one component?
     """
-    def __init__(self) -> None:
-        EvaluationFactor.__init__(self, "Test factor: Responsiveness")
+    def __init__(self, rng: Optional[np.random.Generator] = None) -> None:
+        EvaluationFactor.__init__(self, "Test factor: Responsiveness", rng)
         self._init_datasets()
         self._init_gt()
 
     def _init_datasets(self) -> None:
-        data_file_path = os.path.join(self._stsc_dir, "files/datasets/responsiveness.pkl")
+        data_file_path = path(os.path.join(self._stsc_dir, "files/datasets/responsiveness.pkl"), True)
         if not os.path.exists(data_file_path):
             # We are only using a single training dataset for this evaluation factor
             dg = predata.balanced_tmaze_longtail()
             self._data_gens[dg.name] = dg
-            self._training_datasets[dg.name] = dg.sample(200)
+            self._training_datasets[dg.name] = dg.sample(200, rng=self._rng)
             # provide 1 test set (left; number of test conditions increases, as we are using multiple observation lengths)
-            self._test_datasets[dg.name] = [TestDataset(name="Left", data=dg.sample_component(0, 25))] 
+            self._test_datasets[dg.name] = [TestDataset(name="Left", data=dg.sample_component(0, 25, rng=self._rng))] 
             self._dump_datasets(data_file_path)
         else:
             self._load_datasets(data_file_path)
 
     def _init_gt(self) -> None: 
         # calculate gt distribution sample sets for each observation length
-        data_file_path_base = os.path.join(self._stsc_dir, "files/datasets/responsiveness_gt")
+        data_file_path_base = path(os.path.join(self._stsc_dir, "files/datasets/responsiveness_gt"), True)
         if not os.path.exists(f"{data_file_path_base}_samples.pkl"):
             tdname = list(self._data_gens.keys())[0]  # training dataset name
             self._test_sample_seqs = {}
@@ -78,7 +79,7 @@ class Responsiveness(EvaluationFactor):
                     gmm_seq = data_gen.sequence_distribution()
                     self._test_posteriors[i][obs_len] = data_gen.sequence_distribution()
                     for step in range(pred_len):
-                        s[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples)
+                        s[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples, rng=self._rng)
                 self._test_sample_seqs[obs_len] = SequenceSampleSet(s)
 
             with open(f"{data_file_path_base}_samples.pkl", "wb") as f:

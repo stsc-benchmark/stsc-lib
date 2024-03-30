@@ -15,6 +15,7 @@ class GMM:
         self.covar_matrices = covar_matrices
         self._n_comps = len(self.weights)
         self._gaussians = [stats.multivariate_normal(mean_vectors[k], covar_matrices[k]) for k in range(len(self.weights))]
+        self._rng = np.random.default_rng()
 
     @property
     def n_comps(self) -> int:
@@ -24,12 +25,15 @@ class GMM:
         """ Evaluates the probability density function for a given vector x. """
         return np.sum([self.weights[k] * self._gaussians[k].pdf(x) for k in range(self._n_comps)], axis=0)
 
-    def sample(self, n_samples) -> np.ndarray:
+    def sample(self, n_samples, rng: np.random.Generator = None) -> np.ndarray:
         """ Draws <n_samples> samples from the mixture distribution. """
+        if rng is None:
+            rng = np.random.default_rng()
+
         samples = []
         for _ in range(n_samples):
-            k = np.random.choice(self._n_comps, p=self.weights)
-            samples.append(np.random.multivariate_normal(self.mean_vectors[k], self.covar_matrices[k]))
+            k = rng.choice(self._n_comps, p=self.weights)
+            samples.append(rng.multivariate_normal(self.mean_vectors[k], self.covar_matrices[k]))
         return np.asarray(samples)
 
 

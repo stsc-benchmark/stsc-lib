@@ -18,7 +18,7 @@ class EvaluationFactor:
     Defines ground truth training and test datasets and provides basic functionality for iteration.
     Respective performance measures are defined in each sub-class.
     """
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, rng: Optional[np.random.Generator] = None) -> None:
         self.name = name
         self._stsc_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
         self._data_gens: Dict[str,TrajectoryGMM] = {}
@@ -26,6 +26,7 @@ class EvaluationFactor:
         self._test_datasets: Dict[str, List[TestDataset]] = {}
         self._cur_train_iter_key: Optional[str] = None
         self._cur_test_iter_index: Optional[int] = None
+        self._rng = rng if rng is not None else np.random.default_rng()
 
     def observation_lengths(self, training_dataset_name: str) -> List[int]:
         raise Exception("Function <observation_lengths> not implemented for subclass.")
@@ -98,7 +99,7 @@ class EvaluationFactor:
         with open(file_path, "wb") as f:
             pkl.dump({
                 dgname: {
-                    "ds_gmm": {"weights": self._data_gens[dgname].weights, "means": self._data_gens[dgname].means, "covs": self._data_gens[dgname].covs, "sampling_seed": self._data_gens[dgname].sampling_seed, "name": dgname},
+                    "ds_gmm": {"weights": self._data_gens[dgname].weights, "means": self._data_gens[dgname].means, "covs": self._data_gens[dgname].covs, "name": dgname},
                     "sampled_train_dataset": self._training_datasets[dgname],
                     "sampled_test_datasets": self._test_datasets[dgname]
                 } for dgname in self._data_gens.keys()

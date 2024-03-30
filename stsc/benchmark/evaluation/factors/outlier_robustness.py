@@ -16,6 +16,7 @@ from stsc.benchmark.misc.print_writer import PrintWriter
 import stsc.benchmark.evaluation.standard_evaluation_constants as consts
 from stsc.benchmark.evaluation.factors.evaluation_factor import EvaluationFactor, ResultsInfoPlotOptions, TestDataset
 from stsc.benchmark.misc.overrides import overrides
+from stsc.benchmark.misc.helpers import path
 
 
 class OutlierRobustness(EvaluationFactor):
@@ -29,20 +30,20 @@ class OutlierRobustness(EvaluationFactor):
     Performance Measure: KL-Divergence
     - Calculates a sample-based KL-Divergence between the predicted multi-modal distribution and the ground truth distribution.
     """
-    def __init__(self) -> None:
-        EvaluationFactor.__init__(self, "Test factor: Robustness to outliers")
+    def __init__(self, rng: Optional[np.random.Generator] = None) -> None:
+        EvaluationFactor.__init__(self, "Test factor: Robustness to outliers", rng)
         self._init_datasets()
         self._init_gt()
 
     def _init_datasets(self) -> None:
-        data_file_path = os.path.join(self._stsc_dir, "files/datasets/outlier_robustness.pkl")
+        data_file_path = path(os.path.join(self._stsc_dir, "files/datasets/outlier_robustness.pkl"), True)
         if not os.path.exists(data_file_path):
             dg = predata.balanced_tmaze()
             self._data_gens[dg.name] = dg
-            self._training_datasets[dg.name] = functools.reduce(lambda x,y: x+y, [dg.sample_component(k, 100, cap_length=15) for k in range(dg.n_comps)])
+            self._training_datasets[dg.name] = functools.reduce(lambda x,y: x+y, [dg.sample_component(k, 100, cap_length=15, rng=self._rng) for k in range(dg.n_comps)])
             # provide 4 test sets: 
             # - 1 without outliers 
-            self._test_datasets[dg.name] = [TestDataset(name="No Outliers", data=np.asarray(functools.reduce(lambda x,y: x+y, [dg.sample_component(k, 20, cap_length=15) for k in range(dg.n_comps)])))]
+            self._test_datasets[dg.name] = [TestDataset(name="No Outliers", data=np.asarray(functools.reduce(lambda x,y: x+y, [dg.sample_component(k, 20, cap_length=15, rng=self._rng) for k in range(dg.n_comps)])))]
             # - 4 with outliers at the 2nd, 3rd, 4th and 5th (last point) observed point (20 each), respectively.
             # -- re-use the sampled sequences without outliers and add those in
             for outlier_pos in [1, 2, 3, 4]:
@@ -59,7 +60,7 @@ class OutlierRobustness(EvaluationFactor):
 
     def _init_gt(self) -> None: 
         # use the same sample set sequences for all test datasets (gt target distribution does not consider outliers)
-        data_file_path_base = os.path.join(self._stsc_dir, "files/datasets/outlier_robustness_gt")
+        data_file_path_base = path(os.path.join(self._stsc_dir, "files/datasets/outlier_robustness_gt"), True)
         if not os.path.exists(f"{data_file_path_base}_samples.pkl"):
             tdname = list(self._data_gens.keys())[0]  # training dataset name
             data_gen = self._data_gens[tdname]
@@ -73,7 +74,7 @@ class OutlierRobustness(EvaluationFactor):
                 gmm_seq = data_gen.sequence_distribution()
                 self._test_posteriors.append(gmm_seq)
                 for step in range(pred_len):
-                    s[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples)
+                    s[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples, rng=self._rng)
 
             for _ in range(len(self._test_datasets[tdname])):
                 self._test_sample_seqs.append(SequenceSampleSet(s))

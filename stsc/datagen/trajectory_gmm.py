@@ -1,7 +1,8 @@
 from __future__ import annotations
 import functools
 from typing import List, Optional, Union
-import functools
+import pickle as pkl
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,7 +28,6 @@ class TrajectoryGMM:
         weights: Union[List, np.ndarray], 
         means: List[np.ndarray], 
         covs: List[np.ndarray],
-        sampling_seed: Optional[int] = None,
         name: Optional[str] = None
     ) -> None:
         """ 
@@ -61,9 +61,23 @@ class TrajectoryGMM:
         self._cond_covars = None
         self._cond_sequence = None
         self._cond_indices: Optional[List[int]] = None
-        self._cond_start_index: int = 0
-        self.sampling_seed = sampling_seed
+        self._cond_start_indices: List[int] = self.n_comps * [0]
         self.name = name
+
+    def save(self, save_file_path: str) -> None:
+        with open(save_file_path, "wb") as sf:
+            pkl.dump({
+                "weights": self.weights,
+                "means": self.means,
+                "covs": self.covs,
+                "name": self.name
+            }, sf)
+
+    @classmethod
+    def from_file(cls, file_path: str) -> TrajectoryGMM:
+        assert os.path.exists(file_path), "Couldn't create <TrajectoryGMM> from file. File does not exist."
+        with open(file_path, "rb") as sf:
+            return cls(**pkl.load(sf))
 
     def sequence_distribution(self, exclude_condition_indices: bool = True) -> GMMSequence:
         """ 
@@ -78,7 +92,7 @@ class TrajectoryGMM:
                 continue
 
             # TODO: add possibility to include condition indices
-            target_indices = list(set(range(self.seq_lengths[k])) - set(list(range(self._cond_start_index)) + list(self._cond_indices)))
+            target_indices = list(set(range(self.seq_lengths[k])) - set(list(range(self._cond_start_indices[k])) + list(self._cond_indices[k])))
             gt_weights.append(self.weights[k])
             m, c = self._marginal_normal(self.means[k], self.covs[k], target_indices)
 
@@ -93,13 +107,14 @@ class TrajectoryGMM:
     def posterior(
         self, 
         observation: np.ndarray, 
-        obs_indices: Union[np.ndarray,List[int]], 
+        #obs_indices: Union[np.ndarray,List[int]], 
         consider_pred_len: Optional[int] = None
     ) -> TrajectoryGMM:
         """ 
-        Switches dataset into posterior distribution mode conditioned on given observation. 
-        Caution: This implementation currently only supports conditioning on the first (consecutive) N sequence points starting at the lowest given index in <obs_indices> (this affects the partitioning of the distribution).
-        Note: Although it is theoretically possible to calculate the posterior considering all components, for numerical reasons, it is however adviced to provide the prediction length, that the posterior will be used for, in the case of datasets with a large number of components. Usually this will allow to ignore several components during posterior calculation, keeping floats more within a reasonable range.
+        Switches dataset into posterior distribution mode conditioned on given observation (with shape [ trajectory length, 2 ]). 
+
+        Technical note: For each mixture components seeks for the len(observation) length sub-sequence that is closest to the given observation in terms of the euclidean distance. 
+        Additional Note: Although it is theoretically possible to calculate the posterior considering all components, for numerical reasons, it is however adviced to provide the prediction length, that the posterior will be used for, in the case of datasets with a large number of components. Usually this will allow to ignore several components during posterior calculation, keeping floats more within a reasonable range.
 
         Partitions mean and covariance matrices like so:
 
@@ -129,40 +144,45 @@ class TrajectoryGMM:
         """
         assert len(observation.shape) == 2, "Observation must be a sequence of trajectory points."
         assert observation.shape[-1] == 2, "Observation trajectory point dimension must be 2."
-        assert len(obs_indices) == len(observation), f"Number of sequences indices ({len(obs_indices)}) must match number of given observed points ({len(observation)})."
+        #assert len(obs_indices) == len(observation), f"Number of sequences indices ({len(obs_indices)}) must match number of given observed points ({len(observation)})."
 
-        if type(obs_indices) is list:
-            obs_indices = np.asarray(obs_indices)
+        #if type(obs_indices) is list:
+        #    obs_indices = np.asarray(obs_indices)
 
-        # sort obs_indices in ascending order
-        obs_indices.sort()
-        start_index = obs_indices[0]
+        # Determine closest sub-sequence for each mixture component
+        flat_obs = observation.reshape([-1])
+        obs_indices = np.empty([self.n_comps, len(observation)], dtype=int)
+        for k in range(self.n_comps):
+            sub_means = np.array([self._prior_means[k][i:i+len(flat_obs)] for i in range(0, len(self._prior_means[k]) - len(flat_obs) + 1, 2)])  # we are in 2d -> step 2
+            #sub_covs = np.array([self.covs[k][i:i+len(flat_obs), i:i+len(flat_obs)] for i in range(0, len(self.means[k]) - len(flat_obs) + 1, 2)])
+            dists = [np.linalg.norm(m - flat_obs) for m in sub_means]
+            #mahalanobis = [np.sqrt((sub_means[i] - flat_obs).T @ np.linalg.inv(sub_covs[i]) @ (sub_means[i] - flat_obs)) for i in range(len(sub_means))]
+            closest_subseq_start = np.argmin(dists)
+            obs_indices[k] = np.arange(start=closest_subseq_start, stop=closest_subseq_start + len(observation))
 
-        index_filter = obs_indices[-1]
-        comp_fun = lambda comp_sl, min_index: comp_sl > min_index
-        if consider_pred_len is not None:
-            index_filter += consider_pred_len
-            comp_fun = lambda comp_sl, min_index: comp_sl >= min_index
+        start_indices = [obs_inds[0] for obs_inds in obs_indices]
+        self._active_components[:] = True
 
         # re-organize components to comply with observed indices
         # 1. "deactivate" components where observed indices exceeed component's sequence length
-        for k in range(self.n_comps):
-            self._active_components[k] = comp_fun(len(self._prior_means[k]) // 2, index_filter + 1)
+        if consider_pred_len:
+            for k in range(self.n_comps):
+                self._active_components[k] = len(self._prior_means[k]) // 2 >= obs_indices[k][-1] + consider_pred_len
 
         # 2. re-normalize weights (set inactive component's weight to 0)
         ws = np.sum([w for k, w in enumerate(self._prior_weights) if self._active_components[k]])
         renorm_weights = np.array([w / ws if self._active_components[k] else 0. for k, w in enumerate(self._prior_weights)])
 
-        flat_obs = observation.reshape([-1])
+        #flat_obs = observation.reshape([-1])
         w_cond_norm = np.sum([renorm_weights[k] * self._normal_pdf(*self._marginal_normal(self._prior_means[k],
                                                                                           self._prior_covs[k],
-                                                                                          obs_indices), 
+                                                                                          obs_indices[k]), 
                                                                     x=flat_obs) 
                               for k in range(self.n_comps) if self._active_components[k]])
        
         cond_weights, cond_means, cond_covs = [], [], []
         self._cond_covars = []
-        obs_ind = list(range(len(obs_indices)))  # from here we will ignore vector/matrix indices < start_index, our observation then starts at index 0
+        obs_ind = list(range(len(obs_indices[k])))  # from here we will ignore vector/matrix indices < start_index, our observation then starts at index 0
         for k in range(self.n_comps):
             if not self._active_components[k]:
                 cond_weights.append(0.)
@@ -172,8 +192,8 @@ class TrajectoryGMM:
                 continue
             
             w = renorm_weights[k]
-            m = self._prior_means[k][2*start_index:]
-            c = self._prior_covs[k][2*start_index:, 2*start_index:]
+            m = self._prior_means[k][2*start_indices[k]:]
+            c = self._prior_covs[k][2*start_indices[k]:, 2*start_indices[k]:]
             mm, mc = self._marginal_normal(m, c, obs_ind)
             cm, cc, p_inds = self._conditional_normal(m, c, obs_ind, flat_obs, ret_permutation=True)
 
@@ -184,17 +204,17 @@ class TrajectoryGMM:
             # Note: p_inds contains the observed indices first, followed by the rest (both in ascending order)
             inv_p_inds = [p_inds.index(v) for v in range(len(p_inds))]
             inflated_cm = np.reshape(np.hstack([flat_obs, cm]).reshape([-1, 2])[inv_p_inds], [-1])  # apply inverse permutation
-            inflated_cm = np.hstack([np.zeros(2*start_index), inflated_cm])  # add skipped indices
+            inflated_cm = np.hstack([np.zeros(2*start_indices[k]), inflated_cm])  # add skipped indices
 
-            n_add = 2 * len(obs_indices)
+            n_add = 2 * len(obs_indices[k])
             tmp = np.row_stack([np.zeros(shape=[n_add, cc.shape[1]]), cc])
             tmp = np.column_stack([np.zeros(shape=[n_add + cc.shape[0], n_add]), tmp])
             inflated_cc = np.zeros(shape=tmp.shape)
             for i, ci in enumerate(inv_p_inds):
                 for j, cj in enumerate(inv_p_inds):
                     inflated_cc[2*i:2*i+2, 2*j:2*j+2] = tmp[2*ci:2*ci+2, 2*cj:2*cj+2]
-            inflated_cc2 = np.zeros(shape=[inflated_cc.shape[0] + 2*start_index, inflated_cc.shape[1] + 2*start_index])
-            inflated_cc2[2*start_index:, 2*start_index:] = inflated_cc
+            inflated_cc2 = np.zeros(shape=[inflated_cc.shape[0] + 2*start_indices[k], inflated_cc.shape[1] + 2*start_indices[k]])
+            inflated_cc2[2*start_indices[k]:, 2*start_indices[k]:] = inflated_cc
 
             pdf_scale = self._normal_pdf(mm, mc, flat_obs)
             cond_weight = (w * pdf_scale) / w_cond_norm
@@ -209,7 +229,7 @@ class TrajectoryGMM:
         self.covs = cond_covs
         self._cond_sequence = np.copy(observation)
         self._cond_indices = obs_indices[:]
-        self._cond_start_index = start_index
+        self._cond_start_indices = start_indices[:]
 
         return self
 
@@ -223,46 +243,62 @@ class TrajectoryGMM:
         self._cond_sequence = None
         self._cond_indices = None
         self._cond_output_indices = None
-        self._cond_start_index = 0
+        self._cond_start_indices = self.n_comps * [0]
         return self
 
-    def sample(self, num_samples: int, cap_length: Optional[int] = None) -> List[np.ndarray]: 
+    def sample(self, num_samples: int, cap_length: Optional[int] = None, rng: Optional[np.random.Generator] = None) -> List[np.ndarray]: 
         """ 
         Draws <num_samples> samples from the prior or posterior GP distribution.
         Sampled trajectories are reshaped into 2D sequences.
         """
         # TODO: possibility to restrict samples to 1 and 2 sigma regions only (to prevent strong outliers)
         # TODO: use sample_component internally
-        np.random.seed(self.sampling_seed)
+        if rng is None:
+            rng = np.random.default_rng()
 
         samples = []
-        si = 2*self._cond_start_index
         for _ in range(num_samples):
-            k = np.random.choice(self.n_comps, p=self.weights)
-            s = np.random.multivariate_normal(self.means[k][si:], self.covs[k][si:, si:])
+            k = rng.choice(self.n_comps, p=self.weights)
+            si = 2*self._cond_start_indices[k]
+            s = rng.multivariate_normal(self.means[k][si:], self.covs[k][si:, si:])
             s = s.reshape([-1, 2])
             if cap_length is not None:
                 s = s[:cap_length]
             samples.append(s)
 
-        np.random.seed(None)
         return samples
 
-    def sample_component(self, component: int, num_samples: int, cap_length: Optional[int] = None) -> List[np.ndarray]:
+    def sample_component(
+            self, 
+            component: int, 
+            num_samples: int, 
+            cap_length: Optional[int] = None, 
+            scale_variance: Optional[float] = None,
+            rng: Optional[np.random.Generator] = None
+        ) -> List[np.ndarray]:
         """
         Draws <num_samples> samples from the prior or posterior GP distribution considering only the given component.
-        Sampled trajectories are reshaped into 2D sequences.
+        Sampled trajectories are reshaped into 2D sequences. 
+        
+        By providing a <scale_variance> value, samples are restricted to an ellipctical region around the mean vector, which conceptually follows to be somewhat comparable to the limit_variance * sigma region around the mean in the univariate case. This is achieved by just scaling the covariance matrix.
         """
-        np.random.seed(self.sampling_seed)
+        if rng is None:
+            rng = np.random.default_rng()
+
         samples = []
-        si = 2*self._cond_start_index
+        si = 2*self._cond_start_indices[component]
+        if scale_variance is not None:
+            cov = self.covs[component][si:, si:] * scale_variance
+        else:
+            cov = self.covs[component][si:, si:]
+
         for _ in range(num_samples):
-            s = np.random.multivariate_normal(self.means[component][si:], self.covs[component][si:, si:])
+            s = rng.multivariate_normal(self.means[component][si:], cov)
             s = s.reshape([-1, 2])
             if cap_length is not None:
                 s = s[:cap_length]
             samples.append(s)
-        np.random.seed(None)
+
         return samples
 
     def plot(
@@ -272,6 +308,7 @@ class TrajectoryGMM:
         axis: Optional[plt.Axes] = None, 
         label_prefix: str = "", 
         draw_stds: List = [3, 2, 1], 
+        suppress_alpha: bool = False,
         legend=True,
         title=None,
         show: bool = False
@@ -290,15 +327,16 @@ class TrajectoryGMM:
                     m_k = self._prior_means[k].reshape(-1, 2)
                     axis.plot(m_k[:, 0], m_k[:, 1], "x--", color="gray", alpha=0.5)
 
+            alpha_factors = [1., 1., 1.] if suppress_alpha else [0.33, 0.66, 1.]
             for comp in range(self.n_comps):
                 if not self._active_components[comp] or self.weights[comp] < 1e-6:
                     continue
 
                 mseq = self.means[comp].reshape(-1, 2)
-                draw_inds = list(set(range(len(mseq))) - set(list(range(self._cond_start_index)) + list(self._cond_indices)))
+                draw_inds = list(set(range(len(mseq))) - set(list(range(self._cond_start_indices[comp])) + list(self._cond_indices[comp])))
                 if n_steps is not None:
                     draw_inds = draw_inds[:n_steps]
-                alpha = self.weights[comp]
+                alpha = 1. if suppress_alpha else self.weights[comp]
 
                 lines = axis.plot(mseq[draw_inds, 0], mseq[draw_inds, 1], "o", alpha=alpha, label=f"{label_prefix}{self.weights[comp]:.2f}")
                 cur_color = lines[0].get_color()
@@ -349,7 +387,7 @@ class TrajectoryGMM:
 
         if draw_modes:
             for comp in range(self.n_comps):
-                mseq = self.means[comp][2*self._cond_start_index:].reshape(-1, 2)
+                mseq = self.means[comp][2*self._cond_start_indices[comp]:].reshape(-1, 2)
                 axis.plot(mseq[:, 0], mseq[:, 1], "k--", alpha=0.75)
 
         for sample in self.sample(num_samples):
@@ -427,11 +465,9 @@ class TrajectoryGMM:
     
     @staticmethod
     def _normal_pdf(mu: np.ndarray, cov: np.ndarray, x: np.ndarray) -> float:
-        """ Evaluates the Gaussian probaiblity density function for a given value x. """
+        """ Evaluates the Gaussian probability density function for a given value x. """
         d = len(x)
         denom = np.sqrt((2*np.pi)**d * np.linalg.det(cov))
-        t0 = -0.5 * ((x - mu).T @ np.linalg.inv(cov)) @ (x - mu)
-        t1 = np.linalg.inv(cov)
         return (1. / denom) * np.exp(-0.5 * ((x - mu).T @ np.linalg.inv(cov)) @ (x - mu))
     
     @classmethod

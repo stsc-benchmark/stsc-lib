@@ -15,6 +15,7 @@ from stsc.benchmark.misc.print_writer import PrintWriter
 from stsc.benchmark.evaluation.metrics import Metrics
 from stsc.benchmark.evaluation.factors.evaluation_factor import EvaluationFactor, ResultsInfoPlotOptions, TestDataset
 from stsc.benchmark.misc.overrides import overrides
+from stsc.benchmark.misc.helpers import path
 
 
 class VarianceEstimation(EvaluationFactor):
@@ -29,26 +30,26 @@ class VarianceEstimation(EvaluationFactor):
     - Test sets are build in a way that there is always only 1 valid mode in the distribution to be predicted. This is done in order to reduce the possibility for harder to measure and/or control side effects. Further, the target distribution becomes Gaussian, allowing for a closed-form solution for KL-Divergence.
     - We provide a reference baseline value through a "self-KL" value, which calculates the KL-Divergence between multiple sample sets taken from the ground truth distribution.
     """
-    def __init__(self) -> None:
-        EvaluationFactor.__init__(self, "Test factor: Variance Estimation")
+    def __init__(self, rng: Optional[np.random.Generator] = None) -> None:
+        EvaluationFactor.__init__(self, "Test factor: Variance Estimation", rng)
         self._init_datasets()
         self._init_gt()
 
     def _init_datasets(self) -> None:
-        data_file_path = os.path.join(self._stsc_dir, "files/datasets/var_estimation.pkl")
+        data_file_path = path(os.path.join(self._stsc_dir, "files/datasets/var_estimation.pkl"), True)
         if not os.path.exists(data_file_path):
             dg = predata.diamond()
             self._data_gens[dg.name] = dg
-            self._training_datasets[dg.name] = functools.reduce(lambda x,y: x+y, [dg.sample_component(k, 100) for k in range(dg.n_comps)])
+            self._training_datasets[dg.name] = functools.reduce(lambda x,y: x+y, [dg.sample_component(k, 100, rng=self._rng) for k in range(dg.n_comps)])
             tnames = ["Slow", "Fast", "Acceleration", "Deceleration"]
-            self._test_datasets[dg.name] = [TestDataset(name=tnames[k], data=dg.sample_component(k, 20)) for k in range(dg.n_comps)]
+            self._test_datasets[dg.name] = [TestDataset(name=tnames[k], data=dg.sample_component(k, 20, rng=self._rng)) for k in range(dg.n_comps)]
 
             self._dump_datasets(data_file_path)
         else:
             self._load_datasets(data_file_path)
 
     def _init_gt(self) -> None:
-        data_file_path = os.path.join(self._stsc_dir, "files/datasets/var_estimation_gt_samples.pkl")
+        data_file_path = path(os.path.join(self._stsc_dir, "files/datasets/var_estimation_gt_samples.pkl"), True)
         if not os.path.exists(data_file_path):
             tdname = list(self._data_gens.keys())[0]  # training dataset name
             data_gen = self._data_gens[tdname]
@@ -64,7 +65,7 @@ class VarianceEstimation(EvaluationFactor):
                         data_gen.posterior(test_seq[:2], [0, 1])
                         gmm_seq = data_gen.sequence_distribution()
                         for step in range(len(test_seq[2:])):
-                            s[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples)
+                            s[i, step] = gmm_seq(step).sample(n_samples=consts.n_gt_samples, rng=self._rng)
                     self._test_sample_seqs[-1].append(SequenceSampleSet(s))
             with open(data_file_path, "wb") as f:
                 pkl.dump([[sss.samples for sss in sseqs] for sseqs in self._test_sample_seqs], f)
