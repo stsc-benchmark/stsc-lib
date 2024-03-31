@@ -175,7 +175,7 @@ if __name__ == "__main__":
 
     # model evaluation
     # pred target shape: [ n_sequences, sequence_length, n_samples, 2 ]
-    red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
+    """red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
     print("MM_RED")
     print("NLL:", metr.nll(red_pred, test_data[:, obs_len:], ret_mean=True))
     print("KL:", metr.kl_div(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True))
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     print("EMD:", metr.wasserstein(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True, n_seeds=5, n_projections=100))
     print()
 
-    """vae_pred = SequenceSampleSet(np.swapaxes(vae.predict(test_data[:, :obs_len], pred_len, num_samples=50), 1, 2))  # vae pred shape: [observation.shape[0], num_samples, num_steps, 2]
+    vae_pred = SequenceSampleSet(np.swapaxes(vae.predict(test_data[:, :obs_len], pred_len, num_samples=50), 1, 2))  # vae pred shape: [observation.shape[0], num_samples, num_steps, 2]
     print("VAE")
     print("NLL:", metr.nll(vae_pred, test_data[:, obs_len:], ret_mean=True))
     print("KL:", metr.kl_div(vae_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True))
