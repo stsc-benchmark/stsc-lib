@@ -10,6 +10,7 @@ from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 
 from stsc.datagen.gmm_sequence import GMMSequence
+from stsc.datagen.common import confidence_ellipse
 
 
 class TrajectoryGMM: 
@@ -343,9 +344,9 @@ class TrajectoryGMM:
 
                 for i in draw_inds:
                     step_cov = self.covs[comp][2*i:2*i+2, 2*i:2*i+2]
-                    self._confidence_ellipse(mseq[i], step_cov, axis, 3, cur_color, "none", alpha*0.33)
-                    self._confidence_ellipse(mseq[i], step_cov, axis, 2, cur_color, "none", alpha*0.66)
-                    self._confidence_ellipse(mseq[i], step_cov, axis, 1, cur_color, "none", alpha*1.)
+                    confidence_ellipse(mseq[i], step_cov, axis, 3, cur_color, "none", alpha*0.33)
+                    confidence_ellipse(mseq[i], step_cov, axis, 2, cur_color, "none", alpha*0.66)
+                    confidence_ellipse(mseq[i], step_cov, axis, 1, cur_color, "none", alpha*1.)
 
             plt.title(title)
             if legend:
@@ -364,9 +365,9 @@ class TrajectoryGMM:
 
             for t in range(self.seq_lengths[comp]):
                 step_cov = self.covs[comp][2*t:2*t+2, 2*t:2*t+2]
-                self._confidence_ellipse(mseq[t], step_cov, axis, 3, cur_color, "none", alpha*0.33)
-                self._confidence_ellipse(mseq[t], step_cov, axis, 2, cur_color, "none", alpha*0.66)
-                self._confidence_ellipse(mseq[t], step_cov, axis, 1, cur_color, "none", alpha*1.)
+                confidence_ellipse(mseq[t], step_cov, axis, 3, cur_color, "none", alpha*0.33)
+                confidence_ellipse(mseq[t], step_cov, axis, 2, cur_color, "none", alpha*0.66)
+                confidence_ellipse(mseq[t], step_cov, axis, 1, cur_color, "none", alpha*1.)
 
         plt.title(title)
         if legend:
@@ -469,26 +470,4 @@ class TrajectoryGMM:
         d = len(x)
         denom = np.sqrt((2*np.pi)**d * np.linalg.det(cov))
         return (1. / denom) * np.exp(-0.5 * ((x - mu).T @ np.linalg.inv(cov)) @ (x - mu))
-    
-    @classmethod
-    def _confidence_ellipse(cls, mean, cov, axis, n_std, edgecolor, facecolor, alpha):
-        # https://matplotlib.org/3.1.1/gallery/statistics/confidence_ellipse.html#sphx-glr-gallery-statistics-confidence-ellipse-py
-        # https://carstenschelp.github.io/2018/09/14/Plot_Confidence_Ellipse_001.html
-
-        pearson = cov[0, 1] / (np.sqrt(cov[0, 0]) * np.sqrt(cov[1, 1]))
-
-        ell_radius_x = np.sqrt(1 + pearson)
-        ell_radius_y = np.sqrt(1 - pearson)
-        ellipse = Ellipse((0, 0), width=ell_radius_x * 2, height=ell_radius_y * 2, edgecolor=edgecolor, facecolor=facecolor, alpha=alpha)
-
-        scale_x = np.sqrt(cov[0, 0]) * n_std
-        scale_y = np.sqrt(cov[1, 1]) * n_std
-
-        transf = transforms.Affine2D() \
-            .rotate_deg(45) \
-            .scale(scale_x, scale_y) \
-            .translate(mean[0], mean[1])
-
-        ellipse.set_transform(transf + axis.transData)
-        axis.add_patch(ellipse)
         

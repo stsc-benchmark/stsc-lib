@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import numpy as np
 from scipy.special import comb
@@ -92,12 +92,10 @@ class BezierSpline:
         
         self._segments.append(segment)
         return self
-
-    def curve_point(self, pos_t: float) -> np.ndarray:
+    
+    def map_t(self, pos_t: float) -> Tuple[int,float]:
         """
-        Calculates a curve point given the position t in [0, 1] on the spline curve.
-        First maps t onto the corresponding Bézier curve segment and then calculates the curve point according to that segment
-        using the <bezier_curve_point> function.
+        Maps given position onto its corresponding curve segment and calculates its local position.
 
         :param pos_t: positional parameter
         :return: curve point
@@ -114,13 +112,43 @@ class BezierSpline:
         local_bounds = local_curve_bounds[local_index]
         local_pos = (pos_t - local_bounds[0]) / (local_bounds[1] - local_bounds[0])
 
+        return local_index, local_pos
+
+    def curve_point(self, pos_t: float) -> np.ndarray:
+        """
+        Calculates a curve point given the position t in [0, 1] on the spline curve.
+        First maps t onto the corresponding Bézier curve segment and then calculates the curve point according to that segment
+        using the <bezier_curve_point> function.
+
+        :param pos_t: positional parameter
+        :return: curve point
+        """
+        assert 0. <= pos_t <= 1., f"<pos_t> must be in [0, 1]. Given: {pos_t}"
+
+        """
+        # map spline curve position onto local curve position
+        n_curves = len(self._segments)
+        tmp = np.linspace(0, 1, n_curves + 1)
+        local_curve_bounds = list(zip(tmp[:-1], tmp[1:]))
+
+        # finds first interval given pos_t is contained in
+        local_index = np.argmax([b[0] <= pos_t <= b[1] for b in local_curve_bounds])
+        local_bounds = local_curve_bounds[local_index]
+        local_pos = (pos_t - local_bounds[0]) / (local_bounds[1] - local_bounds[0])
+        """
+
+        local_index, local_pos = self.map_t(pos_t)
+
         return self.bezier_curve_point(local_pos, self._segments[local_index])
 
     def plot(
         self,
         num_pts: int = 100, 
+        color_code_segments: bool = True,
+        segment_colors: Optional[List] = None,
+        line_style: str = "-",
         connect_control_pts: bool = False,
-        highlight_start: bool = False, 
+        highlight_start: str = "none",  # either: "none", "first", "all"
         show: bool = True
     ):
         """
@@ -128,20 +156,29 @@ class BezierSpline:
 
         :param num_pts: Number of curve points to draw
         :param connect_control_pts: connect control points with lines to indicate control point sequence and convex hull
-        :param highlight_start: highlights the first control points
+        :param highlight_start: highlights the first control point of the curve ("first"), of each segment ("all") or neither ("none")
         :param show: Flag to call plt.show() or not
         """
         ax = plt.gca()
         t_vals = np.linspace(0, 1, num=num_pts)
         for i, seg in enumerate(self._segments):
+            if not color_code_segments:
+                seg_color = "k"
+            elif segment_colors is not None:
+                seg_color = segment_colors[i]
+            else:
+                seg_color = None
+
             seg_pts = np.array([self.bezier_curve_point(t, seg) for t in t_vals])
-            ax.plot(seg_pts[:, 0], seg_pts[:, 1], "-")
+            ax.plot(seg_pts[:, 0], seg_pts[:, 1], line_style, color=seg_color)
             if connect_control_pts:
                 ax.plot(seg[:, 0], seg[:, 1], "ko--", alpha=0.5)
             else:
                 ax.plot(seg_pts[:1, 0], seg_pts[:1, 1], "ko")
 
-            if highlight_start and i == 0:
+            if highlight_start == "first" and i == 0:
+                ax.plot(seg[:1, 0], seg[:1, 1], "ko", markerfacecolor="none", markersize=10)
+            elif highlight_start == "all":
                 ax.plot(seg[:1, 0], seg[:1, 1], "ko", markerfacecolor="none", markersize=10)
 
         if show:

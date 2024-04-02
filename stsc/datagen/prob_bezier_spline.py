@@ -8,6 +8,7 @@ from matplotlib.patches import Ellipse
 import matplotlib.transforms as transforms
 
 from stsc.datagen.bezier_spline import BezierSpline
+from stsc.datagen.common import confidence_ellipse
 
 
 class ProbabilisticBezierSpline:
@@ -145,7 +146,7 @@ class ProbabilisticBezierSpline:
 
         return mu, cov
 
-    def plot(self, axis: Optional[plt.Axes] = None, show: bool = False, n_pts: int = 100):
+    def plot(self, axis: Optional[plt.Axes] = None, show: bool = False, n_pts: int = 100) -> None:
         """
         Draws this spline into a pyplot axis.
 
@@ -173,38 +174,17 @@ class ProbabilisticBezierSpline:
 
         color = lines[0].get_color()
         for t in range(len(mean_curve)):
-            self._confidence_ellipse(mean_curve[t], curve_covars[t], axis, 3, color, "none", 0.33)
-            self._confidence_ellipse(mean_curve[t], curve_covars[t], axis, 2, color, "none", 0.66)
-            self._confidence_ellipse(mean_curve[t], curve_covars[t], axis, 1, color, "none", 1.)
+            confidence_ellipse(mean_curve[t], curve_covars[t], axis, 3, color, "none", 0.33)
+            confidence_ellipse(mean_curve[t], curve_covars[t], axis, 2, color, "none", 0.66)
+            confidence_ellipse(mean_curve[t], curve_covars[t], axis, 1, color, "none", 1.)
 
         if show:
             plt.show()
 
-    @staticmethod
-    def _confidence_ellipse(mean, cov, axis, n_std, edgecolor, facecolor, alpha):
-        # https://matplotlib.org/3.1.1/gallery/statistics/confidence_ellipse.html#sphx-glr-gallery-statistics-confidence-ellipse-py
-        # https://carstenschelp.github.io/2018/09/14/Plot_Confidence_Ellipse_001.html
-
-        pearson = cov[0, 1] / (np.sqrt(cov[0, 0]) * np.sqrt(cov[1, 1]))
-
-        ell_radius_x = np.sqrt(1 + pearson)
-        ell_radius_y = np.sqrt(1 - pearson)
-        ellipse = Ellipse((0, 0), width=ell_radius_x * 2, height=ell_radius_y * 2, edgecolor=edgecolor, facecolor=facecolor, alpha=alpha)
-
-        scale_x = np.sqrt(cov[0, 0]) * n_std
-        scale_y = np.sqrt(cov[1, 1]) * n_std
-
-        transf = transforms.Affine2D() \
-            .rotate_deg(45) \
-            .scale(scale_x, scale_y) \
-            .translate(mean[0], mean[1])
-
-        ellipse.set_transform(transf + axis.transData)
-        axis.add_patch(ellipse)
-
     def gp_discretize(
         self, 
         num_discretization_pts: Optional[int] = None,
+        fixed_curve_pts: Optional[List[int]] = None,
         point_distance: Optional[float] = None,
         acceleration: Optional[float] = None,
         init_point_distance: Optional[float] = 1.,
@@ -220,16 +200,20 @@ class ProbabilisticBezierSpline:
         [1] Hug, Ronny, et al. "Bézier Curve Gaussian Processes." arXiv preprint arXiv:2205.01754 (2022).
 
         :param num_discretization_pts: The number of Gaussian curve points to extract. Curve points are spread evenly across the underlying spline.
+        :param fixed_curve_pts: Fixed list of curve parameters t_i to use for discretization
         :param point_distance: The euclidean distance between subsequent Gaussian curve points. Curve points are extracted, such that the distance requirement holds, yielding n curve points.
         :param acceleration: The increase in distance between subsequent Gaussian curve points. Curve points are extracted, such that the gradually increasing distance requirement holds, yielding n curve points. This approach also required setting <init_point_distance>.
         :param init_point_distance: Initial curve point distance, which is then increased according to <acceleration>.
         :param sequence_length_cap: Caps the maximum number of curve points for distance and acceleration approaches. This is regardless of the remaining distance to the spline's last control point. 
         """
-        assert num_discretization_pts is not None or point_distance is not None or acceleration is not None, "Either <num_discretization_pts>, <target_distance> or <acceleration> must be set."
+        assert num_discretization_pts is not None or fixed_curve_pts is not None or point_distance is not None or acceleration is not None, "Either <num_discretization_pts>, <target_distance> or <acceleration> must be set."
 
         # Determine curve mean vectors and corresponding curve positional parameters (t)
         if num_discretization_pts is not None:
             mean_pts, t_vals = self.mean_spline._discretize_equi_pts(num_discretization_pts, ret_t_vals=True)
+        elif fixed_curve_pts is not None:
+            t_vals = fixed_curve_pts[:]
+            mean_pts = np.array([self.mean_spline.curve_point(t) for t in t_vals])
         elif point_distance is not None:
             mean_pts, t_vals = self.mean_spline._discretize_const_dist(point_distance, ret_t_vals=True)
             num_discretization_pts = len(t_vals)
