@@ -55,9 +55,9 @@ def kl_div2(
     kl_div = []
     for i in range(pred_samples.n_sequences):
         seq_kl = []
-        for step in range(len(pred_samples.index_kdes[i])):
+        for step in range(len(pred_samples.index_kdes(i))):
             gt_samples = gt_gmm_seqs[i](step).sample(n_samples=n_gt_samples)
-            seq_kl.append((1. / n_gt_samples) * np.sum([gt_gmm_seqs(step).pdf(sample) / pred_samples.index_kdes[i][step].pdf(sample) for sample in gt_samples]))
+            seq_kl.append((1. / n_gt_samples) * np.sum([gt_gmm_seqs[i](step).pdf(sample) / (pred_samples.index_kdes(i)[step].pdf(sample) + 1e-8) for sample in gt_samples]))
         kl_div.append(np.mean(seq_kl))
     if ret_mean:
         return np.mean(kl_div)

@@ -9,11 +9,11 @@ from main_script_utils.common.colors import STSCColors
 
 
 def gen_figures(base_dir: str, traj_gmm: TrajectoryGMM, obs_len):
-    #_spline_continuity(base_dir)
-    _prob_spline(base_dir)
-    _ngp_prior(base_dir)
-    _posterior_example(base_dir, traj_gmm, obs_len)
-    _eval_dataset(base_dir, traj_gmm)
+    _spline_continuity(base_dir)
+    #_prob_spline(base_dir)
+    #_ngp_prior(base_dir)
+    #_posterior_example(base_dir, traj_gmm, obs_len)
+    #_eval_dataset(base_dir, traj_gmm)
 
 
 def _spline_continuity(base_dir: str):
@@ -23,10 +23,14 @@ def _spline_continuity(base_dir: str):
     b1 = BezierSpline([seg1, seg2])
     b2 = BezierSpline([seg1, seg3])
 
-    b1.plot(connect_control_pts=True, highlight_start=True, show=False)
+    b1.plot(connect_control_pts=True, segment_colors=[STSCColors.Red.value, STSCColors.Blue.value], highlight_start=True, show=False)
+    plt.xlim([-0.1, 4.1])
+    plt.ylim([-2.1, 1.1])
     plt.savefig(f"{base_dir}/c1_spline.png", dpi=300, bbox_inches="tight")
     plt.close()
-    b2.plot(connect_control_pts=True, highlight_start=True, show=False)
+    b2.plot(connect_control_pts=True, segment_colors=[STSCColors.Red.value, STSCColors.Green.value], highlight_start=True, show=False)
+    plt.xlim([-0.1, 4.1])
+    plt.ylim([-2.1, 1.1])
     plt.savefig(f"{base_dir}/c0_spline.png", dpi=300, bbox_inches="tight")
     plt.close()
 

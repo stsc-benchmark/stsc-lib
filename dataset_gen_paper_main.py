@@ -80,7 +80,7 @@ if __name__ == "__main__":
     else:
         gan.load_state_dict(torch.load(f"{gan_ckpt}.pth", map_location=torch_device)) 
 
-    # model evaluation
+    # model evaluation (note: dropped from the paper, will be finalized later)
     # pred target shape: [ n_sequences, sequence_length, n_samples, 2 ]
     """red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
     print("MM_RED")
@@ -104,7 +104,67 @@ if __name__ == "__main__":
     print("EMD:", metr.wasserstein(gan_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True, n_seeds=5, n_projections=100))
     print()"""
 
-    # other stuff...    
+    # qualitative evaluation
+    sample_traj = sample_dataset.sample_component(0, 1, rng=np.random.default_rng(123), scale_variance=0.5)[0]
+    sample_data = np.array([
+        sample_traj[:obs_len+pred_len],
+        sample_traj[6:6+obs_len+pred_len],
+        sample_traj[11:11+obs_len+pred_len]
+    ])
+    red_pred = SequenceSampleSet(mm_red.predict(sample_data[:, :obs_len], sample_pred=True))
+    sample_posteriors = []
+    for traj in sample_data:
+        sample_dataset.posterior(traj[:obs_len])
+        sample_posteriors.append(sample_dataset.sequence_distribution())
+    sample_dataset.prior()  # reset dataset back to prior state
+
+    for i in range(3):
+        inp_sample = sample_data[i]
+        plt.figure()
+        sample_dataset.posterior(sample_data[i, :obs_len])
+        #plt.plot(sample_traj[:, 0], sample_traj[:, 1], "k--")
+        sample_dataset.plot(n_steps=pred_len, show=False, suppress_alpha=True)
+        #plt.xlim([0, 10])
+        #plt.ylim([-10, 5])
+        plt.plot(inp_sample[:, 0], inp_sample[:, 1], "ko--")
+        plt.plot(inp_sample[:obs_len, 0], inp_sample[:obs_len, 1], "go")
+        for j in range(pred_len):
+            p = red_pred.step_samples(i, j)
+            plt.plot(p[:, 0], p[:, 1], "rs", markerfacecolor="none", alpha=0.5)
+        plt.savefig(f"{base_dir}/red_pred_{i}.png", dpi=300, bbox_inches="tight")
+        plt.close() 
+
+    print("sample")
+    print("NLL:", metr.nll(red_pred, sample_data[:, obs_len:], ret_mean=False))
+    #print("KL:", metr.kl_div(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=False))
+    #print("KL2:", metr.kl_div2(red_pred, test_posteriors, ret_mean=False))
+    print("EMD:", metr.wasserstein(red_pred, sample_posteriors, sample_data[:, :obs_len], ret_mean=False, n_seeds=5, n_projections=100))
+
+    red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
+    test_nll = metr.nll(red_pred, test_data[:, obs_len:], ret_mean=False)
+    print("test")
+    print("NLL:", np.mean(test_nll), np.max(test_nll), np.argmin(test_nll), np.argmax(test_nll))
+    test_wasserstein = metr.wasserstein(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=False, n_seeds=5, n_projections=100)
+    print("EMD:", np.mean(test_wasserstein), np.max(test_wasserstein), np.argmin(test_wasserstein), np.argmax(test_wasserstein))
+
+    suffixes = ["best_nll", "worst_nll", "best_emd", "worst_emd"]
+    for s, i in enumerate([np.argmin(test_nll), np.argmax(test_nll), np.argmin(test_wasserstein), np.argmax(test_wasserstein)]):
+        inp_sample = test_data[i]
+        plt.figure()
+        sample_dataset.posterior(test_data[i, :obs_len])
+        #plt.plot(sample_traj[:, 0], sample_traj[:, 1], "k--")
+        sample_dataset.plot(n_steps=pred_len, show=False, suppress_alpha=True)
+        #plt.xlim([0, 10])
+        #plt.ylim([-10, 5])
+        plt.plot(inp_sample[:, 0], inp_sample[:, 1], "ko--")
+        plt.plot(inp_sample[:obs_len, 0], inp_sample[:obs_len, 1], "go")
+        for j in range(pred_len):
+            p = red_pred.step_samples(i, j)
+            plt.plot(p[:, 0], p[:, 1], "rs", markerfacecolor="none", alpha=0.5)
+        plt.savefig(f"{base_dir}/red_pred_{suffixes[s]}.png", dpi=300, bbox_inches="tight")
+        plt.close() 
+
+    quit()
         
     # plot stuff
     gen_figures(base_dir, sample_dataset, obs_len)
