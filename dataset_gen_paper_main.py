@@ -1,4 +1,5 @@
 import os
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -141,11 +142,17 @@ if __name__ == "__main__":
     print("EMD:", metr.wasserstein(red_pred, sample_posteriors, sample_data[:, :obs_len], ret_mean=False, n_seeds=5, n_projections=100))
 
     red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
+    t_nll_1 = time.time()
     test_nll = metr.nll(red_pred, test_data[:, obs_len:], ret_mean=False)
+    t_nll_2 = time.time()
     print("test")
     print("NLL:", np.mean(test_nll), np.max(test_nll), np.argmin(test_nll), np.argmax(test_nll))
+    t_wasserstein_1 = time.time()
     test_wasserstein = metr.wasserstein(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=False, n_seeds=5, n_projections=100)
+    t_wasserstein_2 = time.time()
     print("EMD:", np.mean(test_wasserstein), np.max(test_wasserstein), np.argmin(test_wasserstein), np.argmax(test_wasserstein))
+    print()
+    print("comp time:", t_nll_2 - t_nll_1, "sec (nll)", t_wasserstein_2 - t_wasserstein_1, "sec (wasserstein)")
 
     suffixes = ["best_nll", "worst_nll", "best_emd", "worst_emd"]
     for s, i in enumerate([np.argmin(test_nll), np.argmax(test_nll), np.argmin(test_wasserstein), np.argmax(test_wasserstein)]):
@@ -163,8 +170,6 @@ if __name__ == "__main__":
             plt.plot(p[:, 0], p[:, 1], "rs", markerfacecolor="none", alpha=0.5)
         plt.savefig(f"{base_dir}/red_pred_{suffixes[s]}.png", dpi=300, bbox_inches="tight")
         plt.close() 
-
-    quit()
         
     # plot stuff
     gen_figures(base_dir, sample_dataset, obs_len)
