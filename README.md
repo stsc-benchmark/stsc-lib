@@ -4,3 +4,6 @@ This repository contains the latest version of the STSC benchmark and consists o
 ## Requirements
 - STSC requirements listed in requirements.txt: matplotlib, numpy, POT, scipy, seaborn
 - Additional requirements: pytorch
+
+## Publications and Technical Reports
+[Generating Synthetic Ground Truth Distributions for Multi-step Trajectory Prediction using Probabilistic Composite Bézier Curves](https://arxiv.org/abs/2404.04397): This is a short paper about the mathematical foundation of the ground truth generation approach used in the benchmark and implemented (with some restrictions) in the [stsc.datagen](/stsc/datagen) package. 
