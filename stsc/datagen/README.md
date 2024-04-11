@@ -39,8 +39,8 @@ dataset.posterior(sample_traj[:4])
 yields the prior and posterior as displayed here:
 
 <p float="middle">
-  <img src="../../out/dataset_gen_paper/dataset_prior.png" width="300" />
-  <img src="../../out/dataset_gen_paper/dataset_posterior_0.png" width="300" /> 
+  <img src="../../readme_images/dataset_prior.png" width="300" />
+  <img src="../../readme_images/dataset_posterior_0.png" width="300" /> 
 </p>
 
 Note that for visualization purposes, each respective trajectory distribution is displayed as a sequence of marginal distributions for each trajectory point. The trajectory and observation is depicted in black.
