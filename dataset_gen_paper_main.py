@@ -5,16 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 
-from stsc.datagen.bezier_spline import BezierSplineBuilder2D
-from stsc.datagen.bezier_spline import BezierSplineBuilder2D as BSB
-from stsc.datagen.bezier_spline import BezierSpline
-from stsc.datagen.prob_bezier_spline import ProbabilisticBezierSpline
 from stsc.datagen.trajectory_gmm import TrajectoryGMM
 import stsc.benchmark.evaluation.metrics as metr
 from stsc.datagen.sequence_sample_set import SequenceSampleSet
-from stsc.datagen.common import confidence_ellipse
 from main_script_utils.common.io import path
-from main_script_utils.common.colors import STSCColors
 from main_script_utils.dataset_gen_paper.dataset import gen_dataset
 from main_script_utils.dataset_gen_paper.models import get_models
 from main_script_utils.dataset_gen_paper.plots import gen_figures
@@ -32,8 +26,6 @@ if __name__ == "__main__":
         sample_dataset.save(dataset_file)
     else:
         sample_dataset = TrajectoryGMM.from_file(dataset_file)
-
-    # TODO: plot mal noch sample von comp 2 dazu um zu schauen ob sie aligned sind (mit start 6 ) + dataset marginal ab index 6
         
     # prepare training and test datasets
     data_rng = np.random.default_rng(1)
@@ -46,8 +38,6 @@ if __name__ == "__main__":
     test_data = np.asarray(test_data)
 
     # calculate ground truth posterior distributions for all test samples
-    #posteriors_file = os.path.join(base_dir, "posteriors.pkl")
-    #if not os.path.exists()
     test_posteriors = []
     test_posterior_samples = []
     for traj in test_data:
@@ -83,27 +73,23 @@ if __name__ == "__main__":
 
     # model evaluation (note: dropped from the paper, will be finalized later)
     # pred target shape: [ n_sequences, sequence_length, n_samples, 2 ]
-    """red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
+    red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
     print("MM_RED")
     print("NLL:", metr.nll(red_pred, test_data[:, obs_len:], ret_mean=True))
-    print("KL:", metr.kl_div(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True))
-    print("KL2:", metr.kl_div2(red_pred, test_posteriors))
     print("EMD:", metr.wasserstein(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True, n_seeds=5, n_projections=100))
     print()
 
     vae_pred = SequenceSampleSet(np.swapaxes(vae.predict(test_data[:, :obs_len], pred_len, num_samples=50), 1, 2))  # vae pred shape: [observation.shape[0], num_samples, num_steps, 2]
     print("VAE")
     print("NLL:", metr.nll(vae_pred, test_data[:, obs_len:], ret_mean=True))
-    print("KL:", metr.kl_div(vae_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True))
     print("EMD:", metr.wasserstein(vae_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True, n_seeds=5, n_projections=100))
     print()
 
     gan_pred = SequenceSampleSet(np.swapaxes(gan.predict(test_data[:, :obs_len], pred_len, num_samples=50), 1, 2))  # gan pred shape: [observation.shape[0], num_samples, num_steps, 2]
     print("GAN")
     print("NLL:", metr.nll(gan_pred, test_data[:, obs_len:], ret_mean=True))
-    print("KL:", metr.kl_div(gan_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True))
     print("EMD:", metr.wasserstein(gan_pred, test_posteriors, test_data[:, :obs_len], ret_mean=True, n_seeds=5, n_projections=100))
-    print()"""
+    print()
 
     # qualitative evaluation
     sample_traj = sample_dataset.sample_component(0, 1, rng=np.random.default_rng(123), scale_variance=0.5)[0]
@@ -123,10 +109,7 @@ if __name__ == "__main__":
         inp_sample = sample_data[i]
         plt.figure()
         sample_dataset.posterior(sample_data[i, :obs_len])
-        #plt.plot(sample_traj[:, 0], sample_traj[:, 1], "k--")
         sample_dataset.plot(n_steps=pred_len, show=False, suppress_alpha=True)
-        #plt.xlim([0, 10])
-        #plt.ylim([-10, 5])
         plt.plot(inp_sample[:, 0], inp_sample[:, 1], "ko--")
         plt.plot(inp_sample[:obs_len, 0], inp_sample[:obs_len, 1], "go")
         for j in range(pred_len):
@@ -137,8 +120,6 @@ if __name__ == "__main__":
 
     print("sample")
     print("NLL:", metr.nll(red_pred, sample_data[:, obs_len:], ret_mean=False))
-    #print("KL:", metr.kl_div(red_pred, test_posteriors, test_data[:, :obs_len], ret_mean=False))
-    #print("KL2:", metr.kl_div2(red_pred, test_posteriors, ret_mean=False))
     print("EMD:", metr.wasserstein(red_pred, sample_posteriors, sample_data[:, :obs_len], ret_mean=False, n_seeds=5, n_projections=100))
 
     red_pred = SequenceSampleSet(mm_red.predict(test_data[:, :obs_len], sample_pred=True))
@@ -154,6 +135,7 @@ if __name__ == "__main__":
     print()
     print("comp time:", t_nll_2 - t_nll_1, "sec (nll)", t_wasserstein_2 - t_wasserstein_1, "sec (wasserstein)")
 
+    # plot best/worst ranked sample according to nll/emd metric
     suffixes = ["best_nll", "worst_nll", "best_emd", "worst_emd"]
     for s, i in enumerate([np.argmin(test_nll), np.argmax(test_nll), np.argmin(test_wasserstein), np.argmax(test_wasserstein)]):
         inp_sample = test_data[i]
@@ -171,6 +153,6 @@ if __name__ == "__main__":
         plt.savefig(f"{base_dir}/red_pred_{suffixes[s]}.png", dpi=300, bbox_inches="tight")
         plt.close() 
         
-    # plot stuff
+    # plot additional stuff
     gen_figures(base_dir, sample_dataset, obs_len)
 
