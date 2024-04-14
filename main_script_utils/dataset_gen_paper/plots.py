@@ -10,10 +10,10 @@ from main_script_utils.common.colors import STSCColors
 
 def gen_figures(base_dir: str, traj_gmm: TrajectoryGMM, obs_len):
     _spline_continuity(base_dir)
-    #_prob_spline(base_dir)
-    #_ngp_prior(base_dir)
-    #_posterior_example(base_dir, traj_gmm, obs_len)
-    #_eval_dataset(base_dir, traj_gmm)
+    _prob_spline(base_dir)
+    _ngp_prior(base_dir)
+    _posterior_example(base_dir, traj_gmm, obs_len)
+    _eval_dataset(base_dir, traj_gmm)
 
 
 def _spline_continuity(base_dir: str):
